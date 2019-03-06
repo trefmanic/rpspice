@@ -18,6 +18,7 @@ https://github.com/kvaps/keepass-url-overrides/blob/master/remmina/remmina-encod
 
 import os
 from os.path import expanduser
+import getpass
 import re
 import time
 import base64
@@ -31,6 +32,9 @@ from Crypto.Cipher import DES3
 DEBUG = False
 
 # TODO: Explain this
+# /sbin/iptables -F
+# /sbin/iptables -t nat -F
+# /sbin/iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-ports 8006
 PVE_PORT = ''
 
 # TODO: get this from the commandline!
@@ -188,13 +192,24 @@ def parse_arguments():
     and <node name (or ID)> <- [TO BE IMPLEMENTED]
     '''
     arg_parser = ArgumentParser()
+
     arg_parser.add_argument("-u", '--user', dest='username', required=True,
                             help="Proxmox PVE username (example: johndoe@pve)")
-    arg_parser.add_argument("-p", "--password", dest='password', required=True,
-                            help="User password")
+
     arg_parser.add_argument("-c", "--cluster", dest='fqdn', required=True,
                             help="Proxmox cluster FQDN (example: foo.example.com)")
-    return arg_parser.parse_args()
+
+    arg_parser.add_argument("-p", "--password", dest='password', required=False,
+                            help="User password in clear text",)
+
+    # We parse here to determine if user had entered password
+    arg_output = arg_parser.parse_args()
+
+    # If -p is not specified, ask for password safely
+    if not arg_output.password:
+        arg_output.password = getpass.getpass()
+
+    return arg_output
 
 def encrypt_remmina(password):
     '''Encrypts a string to the Remmina format
