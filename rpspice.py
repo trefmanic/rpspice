@@ -29,7 +29,7 @@ import requests
 from Crypto.Cipher import DES3
 
 # CONSTANTS
-DEBUG = False
+DEBUG = True
 
 # TODO: Explain this
 # /sbin/iptables -F
@@ -37,17 +37,15 @@ DEBUG = False
 # /sbin/iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-ports 8006
 PVE_PORT = ''
 
-# TODO: get this from the commandline!
-PVE_VM_ID = '100'
-
 def main():
 
     # Get the arguments object
     arguments = parse_arguments()
 
-    # https://<arguments.fqdn>:8006/api2/json/
+    # https://<arguments.fqdn>:[8006]/api2/json/
     pve_api_url = 'https://' + arguments.fqdn + ':' + PVE_PORT + '/api2/json/'
 
+    # TODO: Separate in a function
     # Cluster resources URL
     pve_cluster_status_url = pve_api_url + 'cluster/resources'
 
@@ -61,7 +59,8 @@ def main():
 
     # API link for SPICE config
     # Needs refactoring
-    pve_spice_url = pve_api_url + 'nodes/' + pve_node_name + '/qemu/' + PVE_VM_ID + '/spiceproxy'
+    pve_spice_url = pve_api_url + 'nodes/' + pve_node_name + '/qemu/' +\
+                    arguments.vmid + '/spiceproxy'
 
     # DEBUG
     if DEBUG:
@@ -125,9 +124,6 @@ def main():
 
     # Generating connection file
 
-    def generate_ca_file():
-        print('Im doing nothing for now!')
-
     remmina_connection_file = open(tempfile.NamedTemporaryFile(dir=expanduser("~"),
                                                                suffix='.remmina').name, 'w')
     remmina_ca_file = open(expanduser("~") + '/ca.crt', 'w')
@@ -172,8 +168,6 @@ def main():
     # TODO: Safely remove CA file
     remmina_ca_file.close()
 
-    #remmina_options = '-c ' + remmina_connection_file.name
-
     devnull = open(os.devnull, 'w')
     subprocess.run(["remmina", '--name', 'remmina_spiced', '-c', remmina_connection_file.name],
                   stdout=devnull, stderr=devnull)
@@ -200,7 +194,12 @@ def parse_arguments():
                             help="Proxmox cluster FQDN (example: foo.example.com)")
 
     arg_parser.add_argument("-p", "--password", dest='password', required=False,
-                            help="User password in clear text",)
+                            help="User password in clear text")
+
+    # VM ID/name selection
+    vmid_group = arg_parser.add_mutually_exclusive_group(required=True)
+    vmid_group.add_argument("-n", '--name', dest='vmname', help="VM name in PVE cluster")
+    vmid_group.add_argument("-i", '--id', dest='vmid', help="VM ID in PVE cluster")
 
     # We parse here to determine if user had entered password
     arg_output = arg_parser.parse_args()
@@ -246,6 +245,25 @@ def encrypt_remmina(password):
     result = result.decode('utf-8')
 
     return result
+
+# A placeholder
+def get_node_info():
+    # Input - a json object (API call result)
+    # output - a dictionary with node parameters
+    return None
+
+# A placeholder
+def generate_ca_file():
+    # Input - a json object (API call result)
+    # output - certificate file name
+    print('Im doing nothing for now!')
+
+# A placeholder
+def generate_rc_file():
+    # Input - json object (API call result)
+    # Output - configuration file name
+    # and generate a correct connection file
+    return None # Must return file name
 
 if __name__ == '__main__':
     main()
