@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
+# now with GPG-signed commits
 """rpspice - a Proxmox PVE SPICE wrapper for Remmina
 
 Uses SSH tunneling to connect to SPICE-enabled VMs, which are
@@ -198,7 +199,9 @@ def parse_arguments():
 
     # VM ID/name selection
     vmid_group = arg_parser.add_mutually_exclusive_group(required=True)
+    # Not supported yet
     vmid_group.add_argument("-n", '--name', dest='vmname', help="VM name in PVE cluster")
+    # Not supported yet
     vmid_group.add_argument("-i", '--id', dest='vmid', help="VM ID in PVE cluster")
 
     # We parse here to determine if user had entered password
@@ -225,8 +228,6 @@ def encrypt_remmina(password):
     file_lines = remmina_pref_file.readlines()
     remmina_pref_file.close()
 
-
-
     for i in file_lines:
         if re.findall(r'secret=', i):
             remmina_pref_secret_b64 = i[len(r'secret='):][:-1]
@@ -236,9 +237,7 @@ def encrypt_remmina(password):
 
     key = secret[:24]
     salt = secret[24:]
-
     plaintext = plaintext + b"\0" * (8 - len(plaintext) % 8)
-
     cipher = DES3.new(key, DES3.MODE_CBC, salt)
 
     result = base64.b64encode(cipher.encrypt(plaintext))
