@@ -30,28 +30,34 @@ from Crypto.Cipher import DES3
 # CONSTANTS
 DEBUG = False
 
+# TODO: Explain this
+PVE_PORT = ''
+
 # TODO: get this from the commandline!
 PVE_VM_ID = '100'
 
 def main():
 
-    # Парсим аргументы сценария:
+    # Get the arguments object
     arguments = parse_arguments()
 
+    # https://<arguments.fqdn>:8006/api2/json/
+    pve_api_url = 'https://' + arguments.fqdn + ':' + PVE_PORT + '/api2/json/'
+
+    # Cluster resources URL
+    pve_cluster_status_url = pve_api_url + 'cluster/resources'
+
+    # TODO: Add node name generation code
     # TODO: this needs to be calculated dynamically!
     pve_node_fqdn = arguments.fqdn
     pve_node_name = arguments.fqdn.split('.')[0]
 
-    # API link for getting tickets (https://<arguments.fqdn>:8006/api2/json/access/ticket)
-    pve_ticket_url = 'https://' + arguments.fqdn + ':8006/api2/json/access/ticket'
+    # API link for getting tickets (access/ticket)
+    pve_ticket_url = pve_api_url + 'access/ticket'
 
     # API link for SPICE config
-    # (https://<arguments.fqdn>:8006/api2/json/nodes/origin/qemu/103/spiceproxy)
-    pve_spice_url = str('https://' + arguments.fqdn + ':8006/api2/json/nodes/' + pve_node_name
-                        + '/qemu/' + PVE_VM_ID + '/spiceproxy')
-
-    # Получаем состояние ресурсов кластера
-    pve_status_url = 'https://' + arguments.fqdn + ':8006/api2/json/cluster/resources'
+    # Needs refactoring
+    pve_spice_url = pve_api_url + 'nodes/' + pve_node_name + '/qemu/' + PVE_VM_ID + '/spiceproxy'
 
     # DEBUG
     if DEBUG:
@@ -101,7 +107,7 @@ def main():
         print(pve_spice.json()['data']['tls-port'])
 
 
-    pve_resource = requests.get(pve_status_url, headers=pve_header, cookies=pve_cookies)
+    pve_resource = requests.get(pve_cluster_status_url, headers=pve_header, cookies=pve_cookies)
 
     #DEBUG
     if DEBUG:
@@ -176,9 +182,10 @@ def main():
     print('Bye!!\n')
 
 def parse_arguments():
-    '''Парсер аргументов
+    '''Argument parser for Proxmox API
 
-    Тут мы обрабатываем аргументы сценария
+    Minimal set of arguments: username, password, cluster address
+    and <node name (or ID)> <- [TO BE IMPLEMENTED]
     '''
     arg_parser = ArgumentParser()
     arg_parser.add_argument("-u", '--user', dest='username', required=True,
@@ -190,11 +197,11 @@ def parse_arguments():
     return arg_parser.parse_args()
 
 def encrypt_remmina(password):
-    '''Шифрует пароль для Remmina
+    '''Encrypts a string to the Remmina format
 
-    Извлекает из домашнего каталога пользователя
-    ключ шифрования и шифрует и пароль, возвращает
-    пароль в формате, который Remmina понимает.
+    Extracts a unique key from the users's home
+    directory and uses it to encrypt input.
+    Returns encrypted string.
     '''
     home = expanduser("~")
     remmina_dir = home + '/' + '.remmina/'
