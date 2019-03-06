@@ -26,4 +26,4 @@ Run this script with the **--help** argument to get a full list of options:
 
     ./rpspice.py --help
 
-[comment]: <> (Now with GPG-signed commits)
+[//]: # (real comment)
