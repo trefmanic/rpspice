@@ -25,3 +25,5 @@ As of now you need to have SSH access to the Proxmox VE cluster. The user (root)
 Run this script with the **--help** argument to get a full list of options:
 
     ./rpspice.py --help
+
+[comment]: <> (Now with GPG-signed commits)
