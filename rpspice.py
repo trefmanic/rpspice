@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-# now with GPG-signed commits
+# now  with GPG-signed commits
 """rpspice - a Proxmox PVE SPICE wrapper for Remmina
 
 Uses SSH tunneling to connect to SPICE-enabled VMs, which are
