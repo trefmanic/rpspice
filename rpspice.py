@@ -46,72 +46,34 @@ def main():
     # https://<arguments.fqdn>:[8006]/api2/json/
     pve_api_url = 'https://' + arguments.fqdn + ':' + PVE_PORT + '/api2/json/'
 
-    # TODO: Separate in a function
-    # Cluster resources URL
-    pve_cluster_status_url = pve_api_url + 'cluster/resources'
-
     # TODO: Add node name generation code
     # TODO: this needs to be calculated dynamically!
+
     pve_node_fqdn = arguments.fqdn
     pve_node_name = arguments.fqdn.split('.')[0]
 
-    # API link for getting tickets (access/ticket)
-    pve_ticket_url = pve_api_url + 'access/ticket'
 
-    # API link for SPICE config
+    # TODO: Separate in a function
+    # 2) Cluster resources URL
+    pve_cluster_status_url = pve_api_url + 'cluster/resources'
+
+    # 3) API link for SPICE config
     # Needs refactoring
     pve_spice_url = pve_api_url + 'nodes/' + pve_node_name + '/qemu/' +\
                     arguments.vmid + '/spiceproxy'
 
-    # DEBUG
-    if DEBUG:
-        print(pve_ticket_url)
-        print(pve_spice_url)
-    # END DEBUG
+    # Get credential parameters
+    (pve_cookie, pve_header) = get_pve_cookies(api_url=pve_api_url,
+                                               username=arguments.username,
+                                               password=arguments.password)
 
-    # Sending ticket requests
-    pve_ticket_response = requests.post(url=pve_ticket_url, data={'username':arguments.username,
-                                                                  'password':arguments.password})
+    pve_resource = requests.get(pve_cluster_status_url,
+                                headers=pve_header,
+                                cookies=pve_cookie)
 
-    # TODO: pve_ticket_response.ok <- TRUE
-    # Проверяем ответ сервера
-    if not pve_ticket_response.ok:
-        raise ConnectionError('PVE proxy returned HTTP code ' +
-                              str(pve_ticket_response.status_code))
-
-    # Parsing server response
-
-    pve_ticket = pve_ticket_response.json()['data']['ticket']
-    pve_csrf = pve_ticket_response.json()['data']['CSRFPreventionToken']
-
-    # DEBUG
-    if DEBUG:
-        print(pve_ticket_response.text)
-        print("PVE Ticket: ", pve_ticket, "\n")
-        print("PVE CSRFPreventionToken: ", pve_csrf, "\n")
-
-    # Getting SPICE configuration
-
-    pve_cookies = {
-        'PVEAuthCookie': pve_ticket,
-    }
-    pve_header = {
-        'CSRFPreventionToken': pve_csrf,
-    }
-
-    pve_spice = requests.post(pve_spice_url, headers=pve_header, cookies=pve_cookies)
-
-    # DEBUG
-    if DEBUG:
-        print(pve_spice.status_code)
-        print(pve_spice.text)
-
-        # DATA
-        print(pve_spice.json()['data']['password'])
-        print(pve_spice.json()['data']['tls-port'])
-
-
-    pve_resource = requests.get(pve_cluster_status_url, headers=pve_header, cookies=pve_cookies)
+    pve_spice = requests.post(pve_spice_url,
+                              headers=pve_header,
+                              cookies=pve_cookie)
 
     #DEBUG
     if DEBUG:
@@ -122,18 +84,17 @@ def main():
     remmina_password = encrypt_remmina(pve_spice.json()['data']['password'])
     remmina_port = pve_spice.json()['data']['tls-port']
 
-
-    # Generating connection file
-
-    remmina_connection_file = open(tempfile.NamedTemporaryFile(dir=expanduser("~"),
-                                                               suffix='.remmina').name, 'w')
+    # Generating Remmina CA file
     remmina_ca_file = open(expanduser("~") + '/ca.crt', 'w')
-
     # TODO: Refactor to function here
     generate_ca_file()
-
     remmina_ca_file.write(pve_spice.json()['data']['ca'].replace('\\n', '\n'))
+    # TODO: Safely remove CA file
+    remmina_ca_file.close()
 
+    # Generating connection file
+    remmina_connection_file = open(tempfile.NamedTemporaryFile(dir=expanduser("~"),
+                                                               suffix='.remmina').name, 'w')
     # TODO: This looks like a mess, needs tyding up
     remmina_connection_parameters = '''[remmina]
     sharesmartcard=0
@@ -166,12 +127,10 @@ def main():
     remmina_connection_file.write(remmina_connection_parameters)
     remmina_connection_file.close()
 
-    # TODO: Safely remove CA file
-    remmina_ca_file.close()
 
     devnull = open(os.devnull, 'w')
     subprocess.run(["remmina", '--name', 'remmina_spiced', '-c', remmina_connection_file.name],
-                  stdout=devnull, stderr=devnull)
+                   stdout=devnull, stderr=devnull)
 
 
     # DEBUG: Sometime file could not be deleted immeadiately
@@ -244,6 +203,46 @@ def encrypt_remmina(password):
     result = result.decode('utf-8')
 
     return result
+
+def get_pve_cookies(api_url, username, password):
+    '''Gets credential tokens
+
+    Uses Proxmox API call to get Authentication Cookie
+    and CSRF prevention token. This data is then used
+    to further authentificated API calls.
+
+    Arguments:
+        api_url {string} -- URL of the Proxmox VE cluster API
+        username {string} -- Proxmox VE user name
+        password {string} -- User password
+
+    Returns:
+        [tuple] -- [Returns tuple of dictionaries
+                    in format ({'PVEAuthCookie':'<data>'},{'CSRFPreventionToken':'<data>'})]
+
+    Raises:
+        ConnectionError -- [Raises connection error if the cluster's
+                            answer is anything except 200 OK]
+    '''
+
+    # Sending ticket request
+    pve_ticket_response = requests.post(url=api_url + 'access/ticket',
+                                        data={'username':username,'password':password})
+    # Checking server response
+    if not pve_ticket_response.ok:
+        raise ConnectionError('PVE proxy returned HTTP code ' +
+                              str(pve_ticket_response.status_code))
+
+    pve_cookie = {
+        'PVEAuthCookie': pve_ticket_response.json()['data']['ticket'],
+    }
+
+    pve_header = {
+        'CSRFPreventionToken': pve_ticket_response.json()['data']['CSRFPreventionToken'],
+    }
+
+    # Returns a tuple of dictionariese
+    return pve_cookie, pve_header
 
 # A placeholder
 def get_node_info():
