@@ -30,56 +30,50 @@ import requests
 from Crypto.Cipher import DES3
 
 # CONSTANTS
-DEBUG = True
-
-# TODO: Explain this
-# /sbin/iptables -F
-# /sbin/iptables -t nat -F
-# /sbin/iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-ports 8006
-PVE_PORT = ''
+DEBUG = False
 
 def main():
 
     # Get the arguments object
     arguments = parse_arguments()
 
-    # https://<arguments.fqdn>:[8006]/api2/json/
-    pve_api_url = 'https://' + arguments.fqdn + ':' + PVE_PORT + '/api2/json/'
-
-    # TODO: Add node name generation code
-    # TODO: this needs to be calculated dynamically!
-
-    pve_node_fqdn = arguments.fqdn
-    pve_node_name = arguments.fqdn.split('.')[0]
+    # Determine if the cluster web interface
+    # is running on default 8006 port,
+    # or default SSL port (443)
+    pve_port = determine_port(arguments.fqdn)
 
 
-    # TODO: Separate in a function
-    # 2) Cluster resources URL
-    pve_cluster_status_url = pve_api_url + 'cluster/resources'
+    # 1) PVE API URL
+    # https://<arguments.fqdn>:[port]/api2/json/
+    pve_api_url = 'https://' + arguments.fqdn + ':' + pve_port + '/api2/json/'
 
-    # 3) API link for SPICE config
-    # Needs refactoring
-    pve_spice_url = pve_api_url + 'nodes/' + pve_node_name + '/qemu/' +\
-                    arguments.vmid + '/spiceproxy'
 
     # Get credential parameters
     (pve_cookie, pve_header) = get_pve_cookies(api_url=pve_api_url,
                                                username=arguments.username,
                                                password=arguments.password)
+    # 2) Cluster resources URL
+    # https://<arguments.fqdn>:[port]/api2/json/cluster/resources
+    pve_cluster_status_url = pve_api_url + 'cluster/resources'
 
-    pve_resource = requests.get(pve_cluster_status_url,
-                                headers=pve_header,
-                                cookies=pve_cookie)
+    # If VM name is provided, use it, else use VM ID
+    vminfo = get_node_info(url=pve_cluster_status_url,
+                           pve_cookie=pve_cookie,
+                           pve_header=pve_header,
+                           vmname=arguments.vmname,
+                           vmid=arguments.vmid)
+
+    # 3) API link for SPICE config
+    # Needs refactoring
+    pve_spice_url = pve_api_url + 'nodes/' + vminfo['node'] + '/' + vminfo['type'] + '/' + vminfo['id'] + '/spiceproxy'
 
     pve_spice = requests.post(pve_spice_url,
                               headers=pve_header,
                               cookies=pve_cookie)
 
-    #DEBUG
     if DEBUG:
-        print(pve_resource.status_code)
-        print(pve_resource.text)
-        print('Collecting VM info')
+        print(pve_spice.status_code)
+        print(pve_spice.text)
 
     remmina_password = encrypt_remmina(pve_spice.json()['data']['password'])
     remmina_port = pve_spice.json()['data']['tls-port']
@@ -105,7 +99,7 @@ def main():
     name=spice@VM
     ssh_username=root
     ssh_auth=3
-    ssh_server = ''' + str(pve_node_fqdn) + '''
+    ssh_server = ''' + str(vminfo['node'] + '.' + arguments.fqdn.split('.',1)[1]) + '''
     ssh_enabled=1
     ssh_loopback=1
     ssh_charset=UTF-8
@@ -158,9 +152,7 @@ def parse_arguments():
 
     # VM ID/name selection
     vmid_group = arg_parser.add_mutually_exclusive_group(required=True)
-    # Not supported yet
     vmid_group.add_argument("-n", '--name', dest='vmname', help="VM name in PVE cluster")
-    # Not supported yet
     vmid_group.add_argument("-i", '--id', dest='vmid', help="VM ID in PVE cluster")
 
     # We parse here to determine if user had entered password
@@ -204,6 +196,16 @@ def encrypt_remmina(password):
 
     return result
 
+def determine_port(fqdn):
+    try:
+        request = requests.get('https://' + fqdn + ':443')
+        request.raise_for_status()
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        return '8006'
+    else:
+        return '443'
+
+
 def get_pve_cookies(api_url, username, password):
     '''Gets credential tokens
 
@@ -244,11 +246,34 @@ def get_pve_cookies(api_url, username, password):
     # Returns a tuple of dictionariese
     return pve_cookie, pve_header
 
+
 # A placeholder
-def get_node_info():
+def get_node_info(url, pve_header, pve_cookie, vmname=None, vmid=None):
     # Input - a json object (API call result)
     # output - a dictionary with node parameters
-    return None
+
+    # 1. Create vminfo dictionary.
+
+    vminfo = dict({})
+    pve_resource = requests.get(url, headers=pve_header, cookies=pve_cookie).json()['data']
+
+    # Search for the VM data
+    for item in pve_resource:
+
+        # VM's only
+        if item['type'] == 'lxc' or item['type'] == 'qemu':
+            # if either name or id matches:
+            # may cause collisions?
+            ID = item['id'].split('/')[1] # lxc|qemu/xxx -> xxx
+            if item['name'] == vmname or ID == vmid:
+                vminfo['name'] = item['name']
+                vminfo['type'] = item['type']
+                vminfo['id'] = ID
+                vminfo['node'] = item['node']
+    if not vminfo:
+        # Not name nor id foud
+        raise BaseException("VM not found in cluster")
+    return vminfo
 
 # A placeholder
 def generate_ca_file():
