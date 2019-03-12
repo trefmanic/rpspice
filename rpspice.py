@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 # now  with GPG-signed commits
-"""rpspice - a Proxmox PVE SPICE wrapper for Remmina
+'''rpspice - a Proxmox PVE SPICE wrapper for Remmina
 
 Uses SSH tunneling to connect to SPICE-enabled VMs, which are
 running inside Proxmox PVE.
@@ -15,7 +15,15 @@ https://forum.proxmox.com/threads/remote-spice-access-without-using-web-manager.
 Remmina password encryption:
 https://github.com/kvaps/keepass-url-overrides/blob/master/remmina/remmina-encode-password.py
 
-"""
+'''
+
+'''
+TODO:
+* Document everything
+* Separate SPICE API call into a function
+* Create a way to use different SSH username (now root)
+* Develop a method for guaranteed removal of temp files
+'''
 
 import os
 from os.path import expanduser
@@ -33,7 +41,9 @@ from Crypto.Cipher import DES3
 DEBUG = False
 
 def main():
+    '''Main worker
 
+    '''
     # Get the arguments object
     arguments = parse_arguments()
 
@@ -60,7 +70,8 @@ def main():
 
     # 3) Get API link for SPICE config
     # Needs refactoring
-    pve_spice_url = pve_api_url + 'nodes/' + vminfo['node'] + '/' + vminfo['type'] + '/' + vminfo['id'] + '/spiceproxy'
+    pve_spice_url = pve_api_url + 'nodes/' + vminfo['node'] + '/' +\
+                    vminfo['type'] + '/' + vminfo['id'] + '/spiceproxy'
 
     pve_spice = requests.post(pve_spice_url,
                               headers=pve_header,
