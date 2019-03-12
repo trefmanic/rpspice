@@ -18,12 +18,11 @@ install with:
     pip3 install requests cryptography
 
 ## Usage
-**Please, remember, that this is a prototype. It may not work and could be a subject to major changes in the future.**
 
-As of now you need to have SSH access to the Proxmox VE cluster. The user (root) and the authentification method (RSA key) are still hardcoded in.
+As of now you need to have SSH access to the node of a Proxmox cluster, which is running VM. The user (root) and the authentification method (RSA key) are still hardcoded in.
 
 Run this script with the **--help** argument to get a full list of options:
 
     ./rpspice.py --help
 
-[//]: # (Now with GPG commit signatures.)
+[//]: # (Version 0.1 released!)
