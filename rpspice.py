@@ -42,8 +42,7 @@ def main():
     # or default SSL port (443)
     pve_port = determine_port(arguments.fqdn)
 
-
-    # 1) PVE API URL
+     # 1) PVE API URL
     # https://<arguments.fqdn>:[port]/api2/json/
     pve_api_url = 'https://' + arguments.fqdn + ':' + pve_port + '/api2/json/'
 
@@ -67,59 +66,34 @@ def main():
                               headers=pve_header,
                               cookies=pve_cookie)
 
-    if DEBUG:
-        print(pve_spice.status_code)
-        print(pve_spice.text)
 
-    remmina_password = encrypt_remmina(pve_spice.json()['data']['password'])
     remmina_port = pve_spice.json()['data']['tls-port']
-
-    # Generating Remmina CA file
-    remmina_ca_file = open(expanduser("~") + '/ca.crt', 'w')
-    # TODO: Refactor to function here
-    generate_ca_file()
-    remmina_ca_file.write(pve_spice.json()['data']['ca'].replace('\\n', '\n'))
-    # TODO: Safely remove CA file
-    remmina_ca_file.close()
-
-    # Generating connection file
-    remmina_connection_file = open(tempfile.NamedTemporaryFile(dir=expanduser("~"),
-                                                               suffix='.remmina').name, 'w')
-    # TODO: This looks like a mess, needs tyding up
+    remmina_password = encrypt_remmina(pve_spice.json()['data']['password'])
     node_fqdn = vminfo['node'] + arguments.fqdn.partition('.')[1] +\
-                                 arguments.fqdn.partition('.')[2]
+                                 arguments.fqdn.partition('.')[2] + '\n'
 
-    remmina_connection_parameters = '''[remmina]
-    name=spice@'''+ vminfo['name'] + '''
-    ssh_username=root
-    ssh_auth=3
-    ssh_server = ''' + node_fqdn + '''
-    ssh_enabled=1
-    ssh_loopback=1
-    ssh_charset=UTF-8
-    usetls=1
-    cacert= ''' + str(remmina_ca_file.name) + '''
-    protocol=SPICE
-    disablepasswordstoring=0
-    server=localhost:'''+ str(remmina_port) + '''
-    viewmode=1
-    window_height = 600
-    window_width = 800
-    ''' + 'password = ' + remmina_password
-    remmina_connection_file.write(remmina_connection_parameters)
-    remmina_connection_file.close()
+    # 4) Generating CA file for TLS connection
+    remmina_ca_file_name = generate_ca_file(pve_spice.json()['data']['ca'])
 
 
+    # 5) Generate connection file
+    remmina_connection_file_name = generate_rc_file(vminfo['name'], node_fqdn,
+                                                    remmina_ca_file_name, remmina_port,
+                                                    remmina_password)
+
+    # 6) Starting Remmina subprocess
     devnull = open(os.devnull, 'w')
-    subprocess.run(["remmina", '--name', 'remmina_spiced', '-c', remmina_connection_file.name],
+    subprocess.run(["remmina", '--name', 'remmina_spiced', '-c', remmina_connection_file_name],
                    stdout=devnull, stderr=devnull)
 
 
     # DEBUG: Sometime file could not be deleted immeadiately
     time.sleep(5)
     devnull.close()
-    os.remove(remmina_connection_file.name)
-    print('Bye!!\n')
+    os.remove(remmina_connection_file_name)
+    os.remove(remmina_ca_file_name)
+
+    print('All done and thanks for all the fish.')
 
 def parse_arguments():
     '''Argument parser for Proxmox API
@@ -192,6 +166,18 @@ def encrypt_remmina(password):
     return result
 
 def determine_port(fqdn):
+    '''Determines Proxmox VE port
+
+    Test if Proxmox VE web API is running on
+    the default HTTPS port (443), if not, falls
+    back to the PVE default port (8006)
+
+    Arguments:
+        fqdn {string} -- FQDN of a Proxmox VE cluster.
+
+    Returns:
+        string -- Valid port (443 or 8006)
+    '''
     try:
         request = requests.get('https://' + fqdn + ':443')
         request.raise_for_status()
@@ -293,17 +279,83 @@ def get_node_info(api_url, pve_header, pve_cookie, vmname=None, vmid=None):
         raise BaseException("VM not found in cluster")
     return vminfo
 
-# A placeholder
-def generate_ca_file():
-    # Input - a json object (API call result)
-    # output - certificate file name
-    pass
-# A placeholder
-def generate_rc_file():
-    # Input - json object (API call result)
-    # Output - configuration file name
-    # and generate a correct connection file
-    return None # Must return file name
+def generate_ca_file(ca_raw):
+    '''Generates CA file from raw input
+
+    Takes input as a raw string from JSON API
+    call result and writes it into a temporary file
+
+    Arguments:
+        ca_raw {string} -- Raw string from JSON
+
+    Returns:
+        string -- CA file name
+    '''
+    ca_file = open(tempfile.NamedTemporaryFile(dir=expanduser("~"),
+                                               suffix='.crt').name, 'w')
+
+    ca_file.write(ca_raw.replace('\\n', '\n'))
+    ca_file.close()
+
+    return ca_file.name
+
+
+def generate_rc_file(node_name, node_fqdn, ca_file_name, port, password):
+    '''Makes connection file fo Remmina
+
+    Generates and returns file name of a temporary
+    Remmina connection file.
+
+    Arguments:
+        vminfo {dictionary} -- VM information dictionary in a format:
+                               {'name':'foo', 'node':'bar', 'type': '<lxc or qemu>',}
+        cluster_fqdn {[type]} -- [description]
+        pve_spice {[type]} -- [description]
+        ca_file_name {[type]} -- [description]
+
+    Returns:
+        [type] -- [description]
+    '''
+    # Generating connection file
+    connection_file = open(tempfile.NamedTemporaryFile(dir=expanduser("~"),
+                                                       suffix='.remmina').name, 'w')
+    # Creating a list for Remmina settings
+    conn_param = []
+    # Filling in parameters...
+    # Common settings
+    conn_param.append('[remmina]' + '\n')
+    conn_param.append('name=spice@' + node_name + '\n')
+    # SSH parameters
+    conn_param.append('ssh_username=root' + '\n')
+    conn_param.append('ssh_auth=3' + '\n')
+
+
+
+    conn_param.append('ssh_server=' + node_fqdn + '\n')
+    conn_param.append('ssh_enabled=1' + '\n')
+    conn_param.append('ssh_loopback=1' + '\n')
+    # Testing
+    # conn_param.append('ssh_charset=UTF-8' + '\n')
+    # TLS parameters
+    conn_param.append('usetls=1' + '\n')
+    conn_param.append('cacert=' + ca_file_name + '\n')
+    # Protocol and connection parameters
+    conn_param.append('protocol=SPICE' + '\n')
+    conn_param.append('disablepasswordstoring=0' + '\n')
+    conn_param.append('server=localhost:' + str(port) + '\n')
+    # Testing
+    # conn_param.append('viewmode=1' + '\n')
+    # Window parameters
+    conn_param.append('window_height=720' + '\n')
+    conn_param.append('window_width=1280' + '\n')
+    # Password
+    conn_param.append('password=' + password + '\n')
+
+    # We have collected all settings, writing out:
+    connection_file.writelines(conn_param)
+    connection_file.close()
+
+    return connection_file.name
 
 if __name__ == '__main__':
     main()
