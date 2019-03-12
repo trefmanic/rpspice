@@ -47,23 +47,19 @@ def main():
     # https://<arguments.fqdn>:[port]/api2/json/
     pve_api_url = 'https://' + arguments.fqdn + ':' + pve_port + '/api2/json/'
 
-
-    # Get credential parameters
+    # 2) Get credential parameters
     (pve_cookie, pve_header) = get_pve_cookies(api_url=pve_api_url,
                                                username=arguments.username,
                                                password=arguments.password)
-    # 2) Cluster resources URL
-    # https://<arguments.fqdn>:[port]/api2/json/cluster/resources
-    pve_cluster_status_url = pve_api_url + 'cluster/resources'
-
+    # 3) Get VM status dictionary
     # If VM name is provided, use it, else use VM ID
-    vminfo = get_node_info(url=pve_cluster_status_url,
+    vminfo = get_node_info(api_url=pve_api_url,
                            pve_cookie=pve_cookie,
                            pve_header=pve_header,
                            vmname=arguments.vmname,
                            vmid=arguments.vmid)
 
-    # 3) API link for SPICE config
+    # 3) Get API link for SPICE config
     # Needs refactoring
     pve_spice_url = pve_api_url + 'nodes/' + vminfo['node'] + '/' + vminfo['type'] + '/' + vminfo['id'] + '/spiceproxy'
 
@@ -157,11 +153,18 @@ def parse_arguments():
     return arg_output
 
 def encrypt_remmina(password):
-    '''Encrypts a string to the Remmina format
+    '''Generates encrypted passwords for Remmina
 
-    Extracts a unique key from the users's home
-    directory and uses it to encrypt input.
-    Returns encrypted string.
+    Uses unique key from the user's home directory
+    to encrypt provided string (password) to the format,
+    which Remmina understands.
+    Credits: kvaps @github.com
+
+    Arguments:
+        password {string} -- A password in plaintext
+
+    Returns:
+        string -- Encrypted password
     '''
     home = expanduser("~")
     remmina_dir = home + '/' + '.remmina/'
@@ -197,13 +200,12 @@ def determine_port(fqdn):
     else:
         return '443'
 
-
 def get_pve_cookies(api_url, username, password):
     '''Gets credential tokens
 
     Uses Proxmox API call to get Authentication Cookie
-    and CSRF prevention token. This data is then used
-    to further authentificated API calls.
+    and CSRF prevention token. That data is then used
+    to make authentificated API calls.
 
     Arguments:
         api_url {string} -- URL of the Proxmox VE cluster API
@@ -211,17 +213,17 @@ def get_pve_cookies(api_url, username, password):
         password {string} -- User password
 
     Returns:
-        [tuple] -- [Returns tuple of dictionaries
-                    in format ({'PVEAuthCookie':'<data>'},{'CSRFPreventionToken':'<data>'})]
+        tuple -- Returns tuple of dictionaries
+                    in format ({'PVEAuthCookie':'<data>'},{'CSRFPreventionToken':'<data>'})
 
     Raises:
-        ConnectionError -- [Raises connection error if the cluster's
-                            answer is anything except 200 OK]
+        ConnectionError -- Raises connection error if the cluster's
+                            answer is anything except 200 OK
     '''
 
     # Sending ticket request
     pve_ticket_response = requests.post(url=api_url + 'access/ticket',
-                                        data={'username':username,'password':password})
+                                        data={'username':username, 'password':password})
     # Checking server response
     if not pve_ticket_response.ok:
         raise ConnectionError('PVE proxy returned HTTP code ' +
@@ -239,14 +241,38 @@ def get_pve_cookies(api_url, username, password):
     return pve_cookie, pve_header
 
 
-# A placeholder
-def get_node_info(url, pve_header, pve_cookie, vmname=None, vmid=None):
-    # Input - a json object (API call result)
-    # output - a dictionary with node parameters
+def get_node_info(api_url, pve_header, pve_cookie, vmname=None, vmid=None):
+    '''Generates Proxmox VM info
 
-    # 1. Create vminfo dictionary.
+    Uses Proxmox PVE API call to determine VM parameters
+    Searches by VM ID or name, raises exception if both
+    are empty or VM with ID/name not found in cluster.
+
+    Arguments:
+        url {strind} -- Proxmox cluster API URL
+        pve_header {dictionary} -- Authentication: CSRF prevention token
+        pve_cookie {dictionary} -- Authentication: PVEAuth cookie
+
+    Keyword Arguments:
+        vmname {string} -- optional VM name (default: {None})
+        vmid {string} -- optional VM ID (default: {None})
+
+    Returns:
+        dictionary -- VM parameters, such as name, type, id, etc.
+
+    Raises:
+        ValueError -- when either ID or name are not provided.
+        BaseException -- when search for VM is unsuccessfull.
+    '''
+    # If no values provided:
+    if not vmname and not vmid:
+        raise ValueError("Neither Name nor ID provided")
 
     vminfo = dict({})
+
+    # https://<arguments.fqdn>:[port]/api2/json/cluster/resources
+    url = api_url + 'cluster/resources'
+
     pve_resource = requests.get(url, headers=pve_header, cookies=pve_cookie).json()['data']
 
     # Search for the VM data
@@ -256,11 +282,11 @@ def get_node_info(url, pve_header, pve_cookie, vmname=None, vmid=None):
         if item['type'] == 'lxc' or item['type'] == 'qemu':
             # if either name or id matches:
             # may cause collisions?
-            ID = item['id'].split('/')[1] # lxc|qemu/xxx -> xxx
-            if item['name'] == vmname or ID == vmid:
+            true_id = item['id'].split('/')[1] # lxc|qemu/xxx -> xxx
+            if item['name'] == vmname or true_id == vmid:
                 vminfo['name'] = item['name']
                 vminfo['type'] = item['type']
-                vminfo['id'] = ID
+                vminfo['id'] = true_id
                 vminfo['node'] = item['node']
     if not vminfo:
         # Not name nor id foud
