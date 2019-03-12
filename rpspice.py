@@ -91,12 +91,7 @@ def main():
                                                                suffix='.remmina').name, 'w')
     # TODO: This looks like a mess, needs tyding up
     remmina_connection_parameters = '''[remmina]
-    sharesmartcard=0
-    postcommand=
-    enableaudio=0
-    resizeguest=0
-    group=
-    name=spice@VM
+    name=spice@'''+ vminfo['name'] + '''
     ssh_username=root
     ssh_auth=3
     ssh_server = ''' + str(vminfo['node'] + '.' + arguments.fqdn.split('.',1)[1]) + '''
@@ -105,17 +100,12 @@ def main():
     ssh_charset=UTF-8
     usetls=1
     cacert= ''' + str(remmina_ca_file.name) + '''
-    precommand=
-    viewonly=0
     protocol=SPICE
-    sharefolder=
     disablepasswordstoring=0
     server=localhost:'''+ str(remmina_port) + '''
-    disableclipboard=0
-    window_maximize=0
     viewmode=1
-    window_height = 925
-    window_width = 1563
+    window_height = 600
+    window_width = 800
     ''' + 'password = ' + remmina_password + '''
     '''
     remmina_connection_file.write(remmina_connection_parameters)
@@ -279,8 +269,7 @@ def get_node_info(url, pve_header, pve_cookie, vmname=None, vmid=None):
 def generate_ca_file():
     # Input - a json object (API call result)
     # output - certificate file name
-    print('Im doing nothing for now!')
-
+    pass
 # A placeholder
 def generate_rc_file():
     # Input - json object (API call result)
