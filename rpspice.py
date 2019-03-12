@@ -99,7 +99,7 @@ def parse_arguments():
     '''Argument parser for Proxmox API
 
     Minimal set of arguments: username, password, cluster address
-    and <node name (or ID)> <- [TO BE IMPLEMENTED]
+    and node name or ID
     '''
     arg_parser = ArgumentParser()
 
@@ -301,20 +301,20 @@ def generate_ca_file(ca_raw):
 
 
 def generate_rc_file(node_name, node_fqdn, ca_file_name, port, password):
-    '''Makes connection file fo Remmina
+    '''Makes connection file for Remmina
 
     Generates and returns file name of a temporary
     Remmina connection file.
 
     Arguments:
-        vminfo {dictionary} -- VM information dictionary in a format:
-                               {'name':'foo', 'node':'bar', 'type': '<lxc or qemu>',}
-        cluster_fqdn {[type]} -- [description]
-        pve_spice {[type]} -- [description]
-        ca_file_name {[type]} -- [description]
+        node_name {string} -- A name of a node, which runs selected VM
+        node_fqdn {string} -- Fully Qualified Domain Name of a node
+        ca_file_name {string} -- A name of generated CA file
+        port {string} -- Port of a SPICE interface in a node
+        password (string) -- Password, ecnrypted for Remmina
 
     Returns:
-        [type] -- [description]
+        string -- Connection file name
     '''
     # Generating connection file
     connection_file = open(tempfile.NamedTemporaryFile(dir=expanduser("~"),
@@ -328,8 +328,6 @@ def generate_rc_file(node_name, node_fqdn, ca_file_name, port, password):
     # SSH parameters
     conn_param.append('ssh_username=root' + '\n')
     conn_param.append('ssh_auth=3' + '\n')
-
-
 
     conn_param.append('ssh_server=' + node_fqdn + '\n')
     conn_param.append('ssh_enabled=1' + '\n')
