@@ -90,11 +90,14 @@ def main():
     remmina_connection_file = open(tempfile.NamedTemporaryFile(dir=expanduser("~"),
                                                                suffix='.remmina').name, 'w')
     # TODO: This looks like a mess, needs tyding up
+    node_fqdn = vminfo['node'] + arguments.fqdn.partition('.')[1] +\
+                                 arguments.fqdn.partition('.')[2]
+
     remmina_connection_parameters = '''[remmina]
     name=spice@'''+ vminfo['name'] + '''
     ssh_username=root
     ssh_auth=3
-    ssh_server = ''' + str(vminfo['node'] + '.' + arguments.fqdn.split('.',1)[1]) + '''
+    ssh_server = ''' + node_fqdn + '''
     ssh_enabled=1
     ssh_loopback=1
     ssh_charset=UTF-8
@@ -106,8 +109,7 @@ def main():
     viewmode=1
     window_height = 600
     window_width = 800
-    ''' + 'password = ' + remmina_password + '''
-    '''
+    ''' + 'password = ' + remmina_password
     remmina_connection_file.write(remmina_connection_parameters)
     remmina_connection_file.close()
 
