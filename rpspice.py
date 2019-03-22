@@ -52,7 +52,7 @@ def main():
     # or default SSL port (443)
     pve_port = determine_port(arguments.fqdn)
 
-     # 1) PVE API URL
+    # 1) PVE API URL
     # https://<arguments.fqdn>:[port]/api2/json/
     pve_api_url = 'https://' + arguments.fqdn + ':' + pve_port + '/api2/json/'
 
@@ -64,19 +64,16 @@ def main():
     # If VM name is provided, use it, else use VM ID
     vminfo = get_node_info(api_url=pve_api_url,
                            pve_cookie=pve_cookie,
-                           pve_header=pve_header,
                            vmname=arguments.vmname,
                            vmid=arguments.vmid)
 
-    # 3) Get API link for SPICE config
-    # Needs refactoring
-    pve_spice_url = pve_api_url + 'nodes/' + vminfo['node'] + '/' +\
-                    vminfo['type'] + '/' + vminfo['id'] + '/spiceproxy'
-
-    pve_spice = requests.post(pve_spice_url,
-                              headers=pve_header,
-                              cookies=pve_cookie)
-
+    # 4) Get SPICE parameters
+    pve_spice = get_spice_info(api_url=pve_api_url,
+                               pve_cookie=pve_cookie,
+                               pve_header=pve_header,
+                               vmnode=vminfo['node'],
+                               vmtype=vminfo['type'],
+                               vmid=vminfo['id'])
 
     remmina_port = pve_spice.json()['data']['tls-port']
     remmina_password = encrypt_remmina(pve_spice.json()['data']['password'])
@@ -238,7 +235,7 @@ def get_pve_cookies(api_url, username, password):
     return pve_cookie, pve_header
 
 
-def get_node_info(api_url, pve_header, pve_cookie, vmname=None, vmid=None):
+def get_node_info(api_url, pve_cookie, vmname=None, vmid=None):
     '''Generates Proxmox VM info
 
     Uses Proxmox PVE API call to determine VM parameters
@@ -270,7 +267,7 @@ def get_node_info(api_url, pve_header, pve_cookie, vmname=None, vmid=None):
     # https://<arguments.fqdn>:[port]/api2/json/cluster/resources
     url = api_url + 'cluster/resources'
 
-    pve_resource = requests.get(url, headers=pve_header, cookies=pve_cookie).json()['data']
+    pve_resource = requests.get(url, cookies=pve_cookie).json()['data']
 
     # Search for the VM data
     for item in pve_resource:
@@ -289,6 +286,14 @@ def get_node_info(api_url, pve_header, pve_cookie, vmname=None, vmid=None):
         # Not name nor id foud
         raise BaseException("VM not found in cluster")
     return vminfo
+
+def get_spice_info(api_url, pve_cookie, pve_header, vmnode, vmtype, vmid):
+    pve_spice_url = api_url + 'nodes/' + vmnode + '/' + vmtype + '/' + vmid + '/spiceproxy'
+    pve_spice = requests.post(pve_spice_url, headers=pve_header, cookies=pve_cookie)
+    if pve_spice.ok:
+        return pve_spice
+    else:
+        raise ConnectionError('Could not get SPICE params, got answer {status}'.format(status=pve_spice.status_code))
 
 def generate_ca_file(ca_raw):
     '''Generates CA file from raw input
