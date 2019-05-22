@@ -1,5 +1,5 @@
 # rpspice
-A Python wrapper for Remmina to connect to SPICE-enabled VM's running in Proxmox PVE
+A Python wrapper for Remmina to connect to SPICE-enabled VM's, running in a Proxmox VE
 
 ## About
 This wrapper uses Proxmox VE API to generate connection parameters for Remmina, then initiates a connection with the temporary configuration.
@@ -8,7 +8,7 @@ It uses SSH tunneling to connect.
 Based on the shell script, provided by [der-brumm-baer](https://forum.proxmox.com/members/der-brumm-baer.60239/) from [Proxmox VE Community forum](https://forum.proxmox.com/threads/remote-spice-access-without-using-web-manager.16561/page-3).
 
 ## Dependencies
-Remmina and SPICE plugin (obviously), Python3.
+Remmina and SPICE plugin, Python3.
 Python3 modules:
 * requests
 * cryptography
