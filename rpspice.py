@@ -1,6 +1,4 @@
 #!/usr/bin/python3
-# -*- coding: utf-8 -*-
-# now  with GPG-signed commits
 '''rpspice - a Proxmox PVE SPICE wrapper for Remmina
 
 Uses SSH tunneling to connect to SPICE-enabled VMs, which are
@@ -16,14 +14,8 @@ Remmina password encryption:
 https://github.com/kvaps/keepass-url-overrides/blob/master/remmina/remmina-encode-password.py
 
 '''
-
-'''
-TODO:
-* Document everything
-* Separate SPICE API call into a function
-* Create a way to use different SSH username (now root)
-* Develop a method for guaranteed removal of temp files
-'''
+# -*- coding: utf-8 -*-
+# now  with GPG-signed commits
 
 import os
 from os.path import expanduser
@@ -34,8 +26,17 @@ import base64
 import subprocess
 import tempfile
 from argparse import ArgumentParser
-import requests
 from Crypto.Cipher import DES3
+import requests
+
+'''
+TODO:
+* Document everything
+* Separate SPICE API call into a function
+* Create a way to use different SSH username (now root)
+* Develop a method for guaranteed removal of temp files
+'''
+
 
 # CONSTANTS
 DEBUG = False
@@ -288,12 +289,17 @@ def get_node_info(api_url, pve_cookie, vmname=None, vmid=None):
     return vminfo
 
 def get_spice_info(api_url, pve_cookie, pve_header, vmnode, vmtype, vmid):
+    '''Gets VM information
+
+    '''
     pve_spice_url = api_url + 'nodes/' + vmnode + '/' + vmtype + '/' + vmid + '/spiceproxy'
     pve_spice = requests.post(pve_spice_url, headers=pve_header, cookies=pve_cookie)
-    if pve_spice.ok:
-        return pve_spice
-    else:
-        raise ConnectionError('Could not get SPICE params, got answer {status}'.format(status=pve_spice.status_code))
+
+    if not pve_spice.ok:
+        raise ConnectionError('Could not get SPICE params, got answer {status}'.format(
+            status=pve_spice.status_code))
+    return pve_spice
+
 
 def generate_ca_file(ca_raw):
     '''Generates CA file from raw input
