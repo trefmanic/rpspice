@@ -21,7 +21,6 @@ import os
 from os.path import expanduser
 import getpass
 import re
-import time
 import base64
 import subprocess
 import tempfile
@@ -32,9 +31,7 @@ import requests
 '''
 TODO:
 * Document everything
-* Separate SPICE API call into a function
 * Create a way to use different SSH username (now root)
-* Develop a method for guaranteed removal of temp files
 '''
 
 
@@ -78,6 +75,8 @@ def main():
 
     remmina_port = pve_spice.json()['data']['tls-port']
     remmina_password = encrypt_remmina(pve_spice.json()['data']['password'])
+    if DEBUG:
+        print(pve_spice.json()['data']['password'])
     node_fqdn = vminfo['node'] + arguments.fqdn.partition('.')[1] +\
                                  arguments.fqdn.partition('.')[2] + '\n'
 
@@ -86,23 +85,26 @@ def main():
 
 
     # 5) Generate connection file
-    remmina_connection_file_name = generate_rc_file(vminfo['name'], node_fqdn,
-                                                    remmina_ca_file_name, remmina_port,
-                                                    remmina_password)
+    remmina_conn_file_name = generate_rc_file(vminfo['name'], node_fqdn,
+                                              remmina_ca_file_name, remmina_port,
+                                              remmina_password)
 
     # 6) Starting Remmina subprocess
-    devnull = open(os.devnull, 'w')
-    subprocess.run(["remmina", '--name', 'remmina_spiced', '-c', remmina_connection_file_name],
-                   stdout=devnull, stderr=devnull)
+    try:
+        devnull = open(os.devnull, 'w')
+        output = subprocess.run(['remmina', '--name', 'remmina_spiced',
+                                 '-c', remmina_conn_file_name],
+                                stdout=devnull, stderr=devnull)
+        output.check_returncode()
 
+    except subprocess.CalledProcessError:
+        print("Error: Remmina subprocess terminated")
 
-    # DEBUG: Sometime file could not be deleted immeadiately
-    time.sleep(5)
     devnull.close()
-    os.remove(remmina_connection_file_name)
+    os.remove(remmina_conn_file_name)
     os.remove(remmina_ca_file_name)
 
-    print('All done and thanks for all the fish.')
+
 
 def parse_arguments():
     '''Argument parser for Proxmox API
