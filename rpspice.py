@@ -18,7 +18,6 @@ https://github.com/kvaps/keepass-url-overrides/blob/master/remmina/remmina-encod
 # now  with GPG-signed commits
 
 import os
-from os.path import expanduser
 import getpass
 import re
 import base64
@@ -42,6 +41,10 @@ def main():
     '''Main worker
 
     '''
+    # Generate path to Remmina config file
+
+    remmina_config_file = os.path.join(os.path.expanduser('~'),
+                                       '.config', 'remmina', 'remmina.pref')
     # Get the arguments object
     arguments = parse_arguments()
 
@@ -74,7 +77,8 @@ def main():
                                vmid=vminfo['id'])
 
     remmina_port = pve_spice.json()['data']['tls-port']
-    remmina_password = encrypt_remmina(pve_spice.json()['data']['password'])
+    remmina_password = encrypt_remmina(pve_spice.json()['data']['password'],
+                                       remmina_config_file)
     if DEBUG:
         print(pve_spice.json()['data']['password'])
     node_fqdn = vminfo['node'] + arguments.fqdn.partition('.')[1] +\
@@ -90,17 +94,17 @@ def main():
                                               remmina_password)
 
     # 6) Starting Remmina subprocess
-    try:
-        devnull = open(os.devnull, 'w')
-        output = subprocess.run(['remmina', '--name', 'remmina_spiced',
-                                 '-c', remmina_conn_file_name],
-                                stdout=devnull, stderr=devnull)
-        output.check_returncode()
+    with open(os.devnull, 'w') as devnull:
+        try:
 
-    except subprocess.CalledProcessError:
-        print("Error: Remmina subprocess terminated")
+            output = subprocess.run(['remmina', '--name', 'remmina_spiced',
+                                     '-c', remmina_conn_file_name],
+                                    stdout=devnull, stderr=devnull)
+            output.check_returncode()
 
-    devnull.close()
+        except subprocess.CalledProcessError:
+            print("Error: Remmina subprocess terminated")
+
     os.remove(remmina_conn_file_name)
     os.remove(remmina_ca_file_name)
 
@@ -137,7 +141,7 @@ def parse_arguments():
 
     return arg_output
 
-def encrypt_remmina(password):
+def encrypt_remmina(password, remmina_config_file):
     '''Generates encrypted passwords for Remmina
 
     Uses unique key from the user's home directory
@@ -147,17 +151,14 @@ def encrypt_remmina(password):
 
     Arguments:
         password {string} -- A password in plaintext
+        remmina_config_file -- Path to the Remmina config file
 
     Returns:
         string -- Encrypted password
     '''
-    home = expanduser("~")
-    remmina_dir = home + '/' + '.remmina/'
-    remmina_pref = 'remmina.pref'
 
-    remmina_pref_file = open(remmina_dir + remmina_pref)
-    file_lines = remmina_pref_file.readlines()
-    remmina_pref_file.close()
+    with open(remmina_config_file, 'r') as remmina_pref_file:
+        file_lines = remmina_pref_file.readlines()
 
     for i in file_lines:
         if re.findall(r'secret=', i):
@@ -219,8 +220,9 @@ def get_pve_cookies(api_url, username, password):
     '''
 
     # Sending ticket request
+    payload = {'username':username, 'password':password}
     pve_ticket_response = requests.post(url=api_url + 'access/ticket',
-                                        data={'username':username, 'password':password})
+                                        data=payload)
     # Checking server response
     if not pve_ticket_response.ok:
         raise ConnectionError('PVE proxy returned HTTP code ' +
@@ -315,11 +317,11 @@ def generate_ca_file(ca_raw):
     Returns:
         string -- CA file name
     '''
-    ca_file = open(tempfile.NamedTemporaryFile(dir=expanduser("~"),
-                                               suffix='.crt').name, 'w')
+    with open(tempfile.NamedTemporaryFile
+              (dir=os.path.expanduser("~"),
+               suffix='.crt').name, 'w') as ca_file:
 
-    ca_file.write(ca_raw.replace('\\n', '\n'))
-    ca_file.close()
+        ca_file.write(ca_raw.replace('\\n', '\n'))
 
     return ca_file.name
 
@@ -340,9 +342,6 @@ def generate_rc_file(node_name, node_fqdn, ca_file_name, port, password):
     Returns:
         string -- Connection file name
     '''
-    # Generating connection file
-    connection_file = open(tempfile.NamedTemporaryFile(dir=expanduser("~"),
-                                                       suffix='.remmina').name, 'w')
     # Creating a list for Remmina settings
     conn_param = []
     # Filling in parameters...
@@ -350,12 +349,11 @@ def generate_rc_file(node_name, node_fqdn, ca_file_name, port, password):
     conn_param.append('[remmina]' + '\n')
     conn_param.append('name=spice@' + node_name + '\n')
     # SSH parameters
-    conn_param.append('ssh_username=root' + '\n')
-    conn_param.append('ssh_auth=3' + '\n')
-
-    conn_param.append('ssh_server=' + node_fqdn + '\n')
-    conn_param.append('ssh_enabled=1' + '\n')
-    conn_param.append('ssh_loopback=1' + '\n')
+    conn_param.append('ssh_tunnel_username=root' + '\n')
+    conn_param.append('ssh_tunnel_auth=3' + '\n')
+    conn_param.append('ssh_tunnel_server=' + node_fqdn + '\n')
+    conn_param.append('ssh_tunnel_enabled=1' + '\n')
+    conn_param.append('ssh_tunnel_loopback=0' + '\n')
     # Testing
     # conn_param.append('ssh_charset=UTF-8' + '\n')
     # TLS parameters
@@ -373,9 +371,12 @@ def generate_rc_file(node_name, node_fqdn, ca_file_name, port, password):
     # Password
     conn_param.append('password=' + password + '\n')
 
-    # We have collected all settings, writing out:
-    connection_file.writelines(conn_param)
-    connection_file.close()
+    # Generating connection file
+    with open(tempfile.NamedTemporaryFile
+              (dir=os.path.expanduser("~"),
+               suffix='.remmina').name, 'w') as connection_file:
+
+        connection_file.writelines(conn_param)
 
     return connection_file.name
 
